@@ -3,6 +3,9 @@
 Rechecked against [Render pricing](https://render.com/pricing) and
 [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) on
 October 26, 2026. This is a budget estimate, not authorization to buy.
+The Supabase connector quotes **$0/month** to create a project in the existing
+free-tier `LOS` organization as of this check; confirm the target organization
+and quote with Laurel before creating it. A future Pro upgrade is not included.
 
 | Item | Est. monthly | Notes |
 |---|---|---|
