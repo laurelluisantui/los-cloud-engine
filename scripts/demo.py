@@ -177,4 +177,4 @@ show("8. Invalid machine credential rejected (no chat access)",
 # 9. Costs
 show("9. Cost report (real usage ledger)", client.get("/v1/costs", headers=H).json())
 
-print("\nOffline demo passed. Live auth, PostgreSQL RLS, GitHub skill sync, and OpenAI chat remain unverified.\n")
+print("\nOffline demo passed. Live auth, hosted database, GitHub skill sync, and OpenAI chat remain unverified.\n")

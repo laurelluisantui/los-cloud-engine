@@ -15,7 +15,7 @@ from .models import Agent, Task, TaskRun, UsageCost, utcnow
 from .skills_lib import run_skill
 
 _MAX_BYTES = 512 * 1024
-def _check_public_url(url: str) -> None:
+def _check_public_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("only public http(s) URLs are permitted")
@@ -30,15 +30,28 @@ def _check_public_url(url: str) -> None:
         raise ValueError("website address could not be resolved") from exc
     if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
         raise ValueError("refused private or non-public website address")
+    return addresses[0][4][0]
 
 
 def bounded_fetch(url: str, timeout: float = 15.0) -> str:
     """Public pages only. Resolve each redirect; reject oversized responses."""
-    with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False,
-                      headers={"User-Agent": "LOS-CloudEngine/0.1"}) as client:
-        for _ in range(5):
-            _check_public_url(url)
-            with client.stream("GET", url) as r:
+    for _ in range(5):
+        address = _check_public_url(url)
+        parsed = urlparse(url)
+        pinned_host = f"[{address}]" if ":" in address else address
+        port = f":{parsed.port}" if parsed.port else ""
+        pinned_url = parsed._replace(netloc=f"{pinned_host}{port}").geturl()
+        host_header = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+        if parsed.port:
+            host_header += f":{parsed.port}"
+        # Fresh pool for each redirect so a connection to one TLS hostname
+        # cannot be reused for a different hostname on the same public IP.
+        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False,
+                          headers={"User-Agent": "LOS-CloudEngine/0.1"}) as client:
+            with client.stream(
+                "GET", pinned_url, headers={"Host": host_header},
+                extensions={"sni_hostname": parsed.hostname},
+            ) as r:
                 if r.status_code in (301, 302, 303, 307, 308):
                     target = r.headers.get("location")
                     if not target:

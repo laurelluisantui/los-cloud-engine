@@ -31,6 +31,7 @@ def test_redirect_to_private_host_is_rejected(monkeypatch):
     with pytest.raises(ValueError, match="private"):
         runtime.bounded_fetch("https://public.example")
     assert len(hits) == 1
+    assert hits[0] == "https://93.184.215.14"
 
 
 def test_oversized_page_rejected(monkeypatch):
@@ -50,3 +51,21 @@ def test_non_http_and_embedded_credentials_rejected():
         runtime._check_public_url("file:///etc/passwd")
     with pytest.raises(ValueError, match="credentials"):
         runtime._check_public_url("https://a:b@public.example")
+
+
+def test_public_page_connects_to_checked_ip_with_original_tls_name(monkeypatch):
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", _dns)
+    requests = []
+
+    def reply(req):
+        requests.append(req)
+        return httpx.Response(200, content=b"public page")
+
+    transport = httpx.MockTransport(reply)
+    client_type = httpx.Client
+    monkeypatch.setattr(runtime.httpx, "Client",
+                        lambda **kwargs: client_type(transport=transport, **kwargs))
+    assert runtime.bounded_fetch("https://public.example/about") == "public page"
+    assert str(requests[0].url) == "https://93.184.215.14/about"
+    assert requests[0].headers["host"] == "public.example"
+    assert requests[0].extensions["sni_hostname"] == "public.example"
