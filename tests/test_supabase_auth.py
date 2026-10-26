@@ -8,7 +8,6 @@ from engine import auth, config
 def test_supabase_jwt_requires_owner_role(monkeypatch):
     monkeypatch.setattr(config, "SUPABASE_URL", "https://auth.example")
     monkeypatch.setattr(config, "SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
-    monkeypatch.setattr(config, "SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test")
     seen = []
 
     def respond(request):
@@ -16,8 +15,8 @@ def test_supabase_jwt_requires_owner_role(monkeypatch):
         if request.url.path == "/auth/v1/user":
             assert request.headers["authorization"] == "Bearer jwt-owner"
             return httpx.Response(200, json={"id": "owner-1", "email": "owner@example.com"})
-        assert request.headers["apikey"] == "sb_secret_test"
-        assert "authorization" not in request.headers
+        assert request.headers["apikey"] == "sb_publishable_test"
+        assert request.headers["authorization"] == "Bearer jwt-owner"
         return httpx.Response(200, json=[{"role": "owner"}])
 
     client_type = httpx.Client
@@ -31,7 +30,6 @@ def test_supabase_jwt_requires_owner_role(monkeypatch):
 def test_supabase_non_owner_denied(monkeypatch):
     monkeypatch.setattr(config, "SUPABASE_URL", "https://auth.example")
     monkeypatch.setattr(config, "SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
-    monkeypatch.setattr(config, "SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test")
 
     def respond(request):
         if request.url.path == "/auth/v1/user":

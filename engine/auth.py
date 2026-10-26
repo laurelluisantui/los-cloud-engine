@@ -66,16 +66,15 @@ def verify_supabase_token(token: str) -> Dict[str, Any]:
         if r.status_code != 200:
             raise HTTPException(401, "Invalid Supabase token")
         user = r.json()
-        service_headers = {"apikey": config.SUPABASE_SERVICE_ROLE_KEY}
-        if not config.SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
-            service_headers["Authorization"] = f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}"
         role_r = client.get(
             f"{config.SUPABASE_URL}/rest/v1/user_roles",
             params={"user_id": f"eq.{user['id']}", "role": "eq.owner", "select": "role"},
-            headers=service_headers,
-        ) if config.SUPABASE_SERVICE_ROLE_KEY else None
-        roles = role_r.json() if role_r is not None and role_r.status_code == 200 else []
-    if not roles:
+            headers=headers,  # user JWT + publishable key; never a service key
+        )
+        roles = role_r.json() if role_r.status_code == 200 else []
+    if not isinstance(roles, list) or not any(
+        isinstance(row, dict) and row.get("role") == "owner" for row in roles
+    ):
         raise HTTPException(403, "Muffy is owner-only")
     return user
 

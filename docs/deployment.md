@@ -24,8 +24,9 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
 3. Set environment variables (see `.env.example`):
    - `ENGINE_DATABASE_URL` — dedicated engine Postgres URI (app role)
    - `OPENAI_API_KEY`, `MUFFY_MODEL`, `ENGINE_MODEL`
-   - `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-     (the *laurel-haven Lovable Cloud* project — used to validate owner JWTs)
+   - `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` (the *laurel-haven*
+     Lovable Cloud project — user JWT + RLS validates owner membership).
+     Never give this service a Lovable database service credential.
    - `ENGINE_INTERNAL_SECRET` — generate a random 32+ char value
    - `ENGINE_ALLOWED_ORIGINS` — exact Lovable owner site origin; no wildcard
    - `ENGINE_GITHUB_TOKEN` — GitHub App/fine-grained repo-only Contents:write
@@ -54,7 +55,7 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
 
 ## Security checklist (every deploy)
 
-- [ ] `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` set only as host secrets — never in the repo
+- [ ] `OPENAI_API_KEY` set only as a host secret — never in the repo
 - [ ] RLS migration applied and exercised on real Postgres as a non-bypass role
 - [ ] Owner JWT flow verified: non-owner token → 403 on `/v1/chat`
 - [ ] Machine keys minted per-caller with minimal scopes; never the `approval.decide` scope

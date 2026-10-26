@@ -24,7 +24,8 @@ authenticated HTTPS APIs.
 - Humans (laurel-haven chat panel): `Authorization: Bearer <Supabase access token>`.
   The engine validates it against the Supabase project's Auth API
   (`GET {SUPABASE_URL}/auth/v1/user`) and requires the `owner` role
-  (`user_roles`, read via the service role key). No second login.
+  (`user_roles`, read with that user's own JWT under RLS). No service key
+  or second login.
 - Machine callers (schedulers, workers, Companion, Mac mini): `X-Engine-Key: <key>`
   scoped per organization. Client-facing surfaces never receive engine keys.
 - Every privileged action is permission-checked in backend code before any tool runs.
