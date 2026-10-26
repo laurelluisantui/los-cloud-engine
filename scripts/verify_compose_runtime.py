@@ -1,8 +1,12 @@
 """Disposable CI smoke test, run inside the API container (not production)."""
 import json
 import secrets
+import sys
 import time
+from pathlib import Path
 from urllib.request import Request, urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.auth import get_org_id, hash_key
 from engine.db import SessionLocal, scope_session
