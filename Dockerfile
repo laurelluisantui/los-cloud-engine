@@ -7,6 +7,9 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY . .
+RUN groupadd --system los && useradd --system --gid los --home /app los \
+    && chown -R los:los /app
+USER los
 
 # Web API
 FROM base AS api

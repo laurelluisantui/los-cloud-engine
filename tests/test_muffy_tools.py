@@ -2,9 +2,11 @@
 import asyncio
 import json
 import sys
+from types import SimpleNamespace
 
 import pytest
 
+from engine import config
 from engine.auth import Principal, get_org_id
 from engine.db import SessionLocal
 from engine.muffy import _build_tools
@@ -31,3 +33,28 @@ def test_sdk_tools_delegate_and_report_real_status(seeded):
     assert status["status"] == "queued"
     assert status["runs"] == []  # no fabricated execution
     session.close()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10),
+                    reason="Agents SDK requires Python 3.10+; CI/Docker uses 3.12")
+def test_chat_stream_saves_actual_sdk_result(client, owner_headers, seeded, monkeypatch):
+    import agents
+
+    class FakeStream:
+        async def stream_events(self):
+            yield SimpleNamespace(type="raw_response_event",
+                                  data=SimpleNamespace(delta="Task is queued."))
+
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "test-only-placeholder")
+    monkeypatch.setattr(agents.Runner, "run_streamed",
+                        staticmethod(lambda agent, history: FakeStream()))
+    r = client.post("/v1/chat", headers=owner_headers, json={"message": "Check my task"})
+    assert r.status_code == 200, r.text
+    events = [json.loads(line[6:]) for line in r.text.splitlines()
+              if line.startswith("data: ")]
+    assert events[0] == {"type": "token", "data": "Task is queued."}
+    assert events[-1]["type"] == "done"
+    conv_id = events[-1]["data"]["conversation_id"]
+    saved = client.get(f"/v1/conversations/{conv_id}/messages",
+                       headers=owner_headers).json()["messages"]
+    assert [m["content"] for m in saved] == ["Check my task", "Task is queued."]
