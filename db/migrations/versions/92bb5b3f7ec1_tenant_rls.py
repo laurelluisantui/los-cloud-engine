@@ -6,6 +6,7 @@ Revises: fe81fefff753
 from pathlib import Path
 
 from alembic import op
+from sqlalchemy import text
 
 revision = "92bb5b3f7ec1"
 down_revision = "fe81fefff753"
@@ -16,7 +17,9 @@ depends_on = None
 def upgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         source = Path(__file__).resolve().parents[1] / "0002_rls.sql"
-        op.get_bind().exec_driver_sql(source.read_text(encoding="utf-8"))
+        # SQLAlchemy text() escapes PostgreSQL format()'s %I placeholders
+        # before psycopg sees the SQL (exec_driver_sql does not).
+        op.execute(text(source.read_text(encoding="utf-8")))
 
 
 def downgrade() -> None:
