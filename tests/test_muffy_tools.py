@@ -41,6 +41,10 @@ def test_chat_stream_saves_actual_sdk_result(client, owner_headers, seeded, monk
     import agents
 
     class FakeStream:
+        context_wrapper = SimpleNamespace(
+            usage=SimpleNamespace(input_tokens=20, output_tokens=10)
+        )
+
         async def stream_events(self):
             yield SimpleNamespace(type="raw_response_event",
                                   data=SimpleNamespace(delta="Task is queued."))
@@ -58,3 +62,6 @@ def test_chat_stream_saves_actual_sdk_result(client, owner_headers, seeded, monk
     saved = client.get(f"/v1/conversations/{conv_id}/messages",
                        headers=owner_headers).json()["messages"]
     assert [m["content"] for m in saved] == ["Check my task", "Task is queued."]
+    costs = client.get("/v1/costs", headers=owner_headers).json()
+    assert costs["by_model"][0]["tokens_in"] == 20
+    assert costs["by_model"][0]["tokens_out"] == 10

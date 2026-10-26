@@ -9,9 +9,9 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from . import audit, config
+from . import audit, config, providers
 from .auth import Principal
-from .models import Conversation, Message, utcnow
+from .models import Conversation, Message, UsageCost, utcnow
 from .tools import (cost_report, list_agents, manage_schedule,
                     propose_skill_edit, create_task as svc_create_task,
                     read_skill, request_skill_rollback, run_history,
@@ -175,9 +175,23 @@ async def run_muffy(session: Session, principal: Principal, conv: Conversation,
                 tool_events.append({"tool": name})
                 yield {"type": "tool", "data": name}
 
-    from . import audit as _audit
     final_text = "".join(final_text_parts)
+    if not final_text and isinstance(getattr(result, "final_output", None), str):
+        final_text = result.final_output
+        yield {"type": "token", "data": final_text}
     record_message(session, conv, "assistant", final_text, tool_events)
-    _audit.log(session, principal, "muffy.chat", "conversation", conv.id,
-               {"tools": [t["tool"] for t in tool_events]})
+    usage = getattr(getattr(result, "context_wrapper", None), "usage", None)
+    if usage:
+        tokens_in = usage.input_tokens or 0
+        tokens_out = usage.output_tokens or 0
+        session.add(UsageCost(
+            organization_id=principal.organization_id, provider="openai",
+            model=config.MUFFY_MODEL, tokens_in=tokens_in, tokens_out=tokens_out,
+            cost_usd=providers.estimate_cost_usd(config.MUFFY_MODEL, tokens_in, tokens_out),
+        ))
+        session.commit()
+    audit.log(session, principal, "muffy.chat", "conversation", conv.id,
+              {"tools": [t["tool"] for t in tool_events],
+               "tokens_in": getattr(usage, "input_tokens", 0) if usage else 0,
+               "tokens_out": getattr(usage, "output_tokens", 0) if usage else 0})
     yield {"type": "done", "data": {"conversation_id": conv.id}}
