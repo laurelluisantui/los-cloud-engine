@@ -77,9 +77,12 @@ run = session.query(TaskRun).filter_by(task_id=task_id).one()
 
 # 4. Results saved to the database
 show("2-4. Run completed with skill version + real output saved", {
-    "task_status": task.status, "skill": task.skill_slug,
+    "task_status": task.status, "workflow": "research -> audit -> proposal",
     "skill_version": run.skill_version,
-    "findings": run.output["findings"][:2], "cost_usd": run.cost_usd})
+    "findings": run.output["research"]["findings"][:2],
+    "audit": run.output["website_audit"]["summary"],
+    "proposal": run.output["proposal"]["proposal_markdown"][:200],
+    "cost_usd": run.cost_usd})
 session.close()
 
 # 5. Execution history available through the API

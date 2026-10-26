@@ -57,6 +57,32 @@ def bounded_fetch(url: str, timeout: float = 15.0) -> str:
     raise ValueError("website redirected too many times")
 
 
+def run_sales_workflow(session: Session, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    """Research -> audit -> proposal, with evidence carried between skills."""
+    required = ("prospect-research", "prospect-website-audit", "proposal-drafting")
+    agent = session.query(Agent).filter_by(id=task.agent_id).one()
+    if not all(slug in agent.skills for slug in required):
+        raise ValueError("Sales Agent lacks an authorized workflow skill")
+    research, research_version = run_skill(
+        session, task.organization_id, required[0], task.input, context
+    )
+    audit, audit_version = run_skill(
+        session, task.organization_id, required[1],
+        {"website": task.input["website"]}, context
+    )
+    proposal, proposal_version = run_skill(
+        session, task.organization_id, required[2],
+        {**task.input, "findings": research["findings"]}, context
+    )
+    return {
+        "research": research, "website_audit": audit, "proposal": proposal,
+        "skill_versions": dict(zip(required, (
+            research_version, audit_version, proposal_version
+        ))),
+        "human_review_required": True,
+    }
+
+
 def execute_task(session: Session, task: Task, fetch: Any = None) -> Tuple[Dict[str, Any], TaskRun]:
     agent = session.query(Agent).filter_by(id=task.agent_id).one()
 
@@ -74,9 +100,13 @@ def execute_task(session: Session, task: Task, fetch: Any = None) -> Tuple[Dict[
     session.commit()
     session.refresh(run)
     try:
-        output, version = run_skill(session, task.organization_id,
-                                    task.skill_slug or agent.skills[0],
-                                    task.input, context)
+        if agent.slug == "sales-research" and task.skill_slug is None:
+            output = run_sales_workflow(session, task, context)
+            version = "pipeline-v1"
+        else:
+            output, version = run_skill(session, task.organization_id,
+                                        task.skill_slug or agent.skills[0],
+                                        task.input, context)
         run.status = "succeeded"
         run.skill_version = version
         run.output = output
@@ -85,16 +115,16 @@ def execute_task(session: Session, task: Task, fetch: Any = None) -> Tuple[Dict[
         run.error = str(exc)[:2000]
         raise
     finally:
-        usage = context.get("usage")  # skills report provider usage here when available
-        if usage:
-            run.tokens_in = usage.get("tokens_in", 0)
-            run.tokens_out = usage.get("tokens_out", 0)
-            run.cost_usd = usage.get("cost_usd", 0.0)
+        for usage in context.get("usage_total", []):
+            run.tokens_in += usage.get("tokens_in", 0)
+            run.tokens_out += usage.get("tokens_out", 0)
+            run.cost_usd += usage.get("cost_usd", 0.0)
             session.add(UsageCost(organization_id=task.organization_id, task_run_id=run.id,
                                   provider=usage.get("provider", "dev"),
                                   model=usage.get("model", ""),
-                                  tokens_in=run.tokens_in, tokens_out=run.tokens_out,
-                                  cost_usd=run.cost_usd))
+                                  tokens_in=usage.get("tokens_in", 0),
+                                  tokens_out=usage.get("tokens_out", 0),
+                                  cost_usd=usage.get("cost_usd", 0.0)))
         run.finished_at = utcnow()
         session.commit()
         session.refresh(run)

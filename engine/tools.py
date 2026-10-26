@@ -64,10 +64,12 @@ def create_task(session: Session, principal: Principal, agent_slug: str,
                         status="active").one_or_none())
     if agent is None:
         raise KeyError(f"unknown agent '{agent_slug}'")
-    skill = skill_slug or (agent.skills[0] if agent.skills else None)
-    if skill is None:
+    workflow = agent_slug == "sales-research" and skill_slug is None
+    skill = skill_slug if skill_slug else (None if workflow else
+                                          (agent.skills[0] if agent.skills else None))
+    if skill is None and not workflow:
         raise SkillError(f"agent '{agent_slug}' has no skills")
-    if skill not in agent.skills:
+    if skill is not None and skill not in agent.skills:
         raise PermissionDenied(f"agent '{agent_slug}' is not allowed skill '{skill}'")
     task = Task(organization_id=principal.organization_id, agent_id=agent.id,
                 skill_slug=skill, input=input_data, status="queued",
@@ -77,7 +79,7 @@ def create_task(session: Session, principal: Principal, agent_slug: str,
     session.commit()
     session.refresh(task)
     audit.log(session, principal, "task.create", "task", task.id,
-              {"agent": agent_slug, "skill": skill})
+              {"agent": agent_slug, "skill": skill or "full-sales-workflow"})
     return task
 
 

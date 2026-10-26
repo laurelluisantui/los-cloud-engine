@@ -19,6 +19,10 @@ authenticated HTTPS APIs.
 - `engine/models.py` + `db/migrations/` — org-scoped Postgres schema (Alembic)
 - `tests/` — pytest: delegation, authorization, skill versioning, approvals, failure logging
 
+By default, a `sales-research` API task runs all three authorized skills in
+sequence (public research → website audit → review-only proposal). Passing an
+explicit `skill_slug` runs just that permitted skill. No outreach is sent.
+
 ## Auth model (confirmed with owner)
 
 - Humans (laurel-haven chat panel): `Authorization: Bearer <Supabase access token>`.
@@ -73,6 +77,9 @@ approved cost estimate.**
   transaction, so a post-Git DB error requires manual reconciliation.
 - Muffy's live OpenAI chat, browser CORS, Lovable owner JWTs, and non-owner
   denial must be tested against actual staging endpoints before publishing the UI.
+- GitHub Actions runs disposable Python 3.12 tests, PostgreSQL RLS, Docker
+  builds, and a full Compose API/worker/database boot smoke-test; these do not
+  prove a hosted service or a real model call.
 
 ## Safety rules enforced in code
 
