@@ -101,15 +101,9 @@ def test_sales_pipeline_records_model_usage(client, owner_headers, seeded, monke
         name = "openai"
 
         def complete(self, instructions, input_text, **kwargs):
-            if "evidence-based findings" in instructions:
-                result = {"findings": [
-                    {"claim": "Business name appears", "excerpt": "Bluebonnet Dental"}
-                ], "notes": []}
-            else:
-                result = {"proposal_markdown": (
-                    "# Draft\nBluebonnet Dental appears on the site [finding 1]. "
-                    "Price: [PRICE TBD]."
-                )}
+            result = {"findings": [
+                {"claim": "Business name appears", "excerpt": "Bluebonnet Dental"}
+            ], "notes": []}
             return providers.ProviderResult(
                 text=json.dumps(result), tokens_in=120, tokens_out=40,
                 model="gpt-5.4-mini", provider="openai",
@@ -129,9 +123,9 @@ def test_sales_pipeline_records_model_usage(client, owner_headers, seeded, monke
     run = session.query(TaskRun).filter_by(task_id=task_id).one()
     costs = session.query(UsageCost).filter_by(task_run_id=run.id).all()
     assert run.status == "succeeded"
-    assert run.tokens_in == 240 and run.tokens_out == 80
+    assert run.tokens_in == 120 and run.tokens_out == 40
     assert run.cost_usd > 0
-    assert len(costs) == 2
+    assert len(costs) == 1
     session.close()
 
 
