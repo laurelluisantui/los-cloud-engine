@@ -1,5 +1,7 @@
 # L·OS Cloud Engine
 
+L-OS Cloud Engine - AI agents, orchestration, and automation
+
 Modular, cloud-hosted AI agent infrastructure for FORM + LOGIC / YourTechCenter.
 Muffy — the owner-only executive orchestrator — is the primary natural-language
 interface. This repo is the shared backend; it ships no frontend. Frontends
