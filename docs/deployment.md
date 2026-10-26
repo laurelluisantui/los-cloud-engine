@@ -11,22 +11,26 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
 
 ## One-time setup
 
-1. Create the Supabase project `los-cloud-engine` in Laurel's personal org
-   (free tier is enough for dev). Note the Postgres connection string.
-2. Create the GitHub repo `laurelluisantui/los-cloud-engine` (private) and push.
-3. Provision hosting ONLY after cost approval:
+1. The private GitHub repo `laurelluisantui/los-cloud-engine` already exists.
+   After explicit cost/service approval, create a dedicated Supabase project.
+   Record a Postgres connection string for a **non-superuser, non-BYPASSRLS**
+   app role, with CREATE privileges on its own schema. Do not use the
+   Supabase `service_role` or `postgres` role for application traffic.
+2. Provision hosting ONLY after cost approval:
    - Web service: `alembic upgrade head && python -m engine.seed && uvicorn
      engine.api.app:create_app --factory --host 0.0.0.0 --port $PORT`
    - Background worker: `python -m engine.worker`
    - Health check: `GET /healthz`
-4. Set environment variables (see `.env.example`):
-   - `ENGINE_DATABASE_URL` — Supabase Postgres URI
+3. Set environment variables (see `.env.example`):
+   - `ENGINE_DATABASE_URL` — dedicated engine Postgres URI (app role)
    - `OPENAI_API_KEY`, `MUFFY_MODEL`, `ENGINE_MODEL`
    - `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
      (the *laurel-haven Lovable Cloud* project — used to validate owner JWTs)
    - `ENGINE_INTERNAL_SECRET` — generate a random 32+ char value
-5. Apply RLS once on the database: `psql "$ENGINE_DATABASE_URL" -f db/migrations/0002_rls.sql`.
-6. In laurel-haven, set the engine base URL env var (used by the Muffy panel)
+   - `ENGINE_ALLOWED_ORIGINS` — exact Lovable owner site origin; no wildcard
+4. `alembic upgrade head` applies RLS automatically on Postgres; verify
+   cross-tenant reads and writes are denied with an unset/wrong org context.
+5. In laurel-haven, set the engine base URL env var (used by the Muffy panel)
    and keep the panel behind its config flag until verified.
 
 ## Portability
@@ -39,14 +43,18 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
 ## Rollback
 
 - Application: redeploy the previous image tag.
-- Database: `alembic downgrade -1` (migrations are reversible; RLS file is idempotent).
-- Skill content: Muffy/API `skill.rollback` restores exact prior bytes (approval-gated).
+- Database: test `alembic downgrade -1` on staging before any production
+  rollback (downgrading RLS removes isolation, so NEVER run live unreviewed).
+- Skill content: `skill.rollback` is approval-gated; durable GitHub sync is
+  not yet operational.
 
 ## Security checklist (every deploy)
 
 - [ ] `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` set only as host secrets — never in the repo
-- [ ] RLS policies applied (`0002_rls.sql`) on Postgres
+- [ ] RLS migration applied and exercised on real Postgres as a non-bypass role
 - [ ] Owner JWT flow verified: non-owner token → 403 on `/v1/chat`
 - [ ] Machine keys minted per-caller with minimal scopes; never the `approval.decide` scope
 - [ ] `GET /healthz` public; everything else authenticated
 - [ ] HTTPS only (host-managed TLS)
+- [ ] DNS-rebinding resistant egress policy or outbound proxy restricts agent
+      website fetches to public hosts; application-level checks alone are insufficient

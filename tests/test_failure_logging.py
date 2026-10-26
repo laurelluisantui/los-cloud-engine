@@ -90,6 +90,46 @@ def test_timeout_marks_task_failed(client, owner_headers, seeded, tmp_path, monk
     assert any("timeout" in (run["error"] or "") for run in body["runs"])
 
 
+def test_timed_out_process_cannot_finish_after_failure(
+    client, owner_headers, seeded, tmp_path, monkeypatch
+):
+    import time
+    import engine.config as config
+    from engine.skills_lib import sync_library
+    from engine.models import Agent
+
+    marker = tmp_path / "late-result"
+    slug = "late-writer"
+    root = tmp_path / slug
+    root.mkdir()
+    (root / "SKILL.md").write_text(
+        "---\nname: late-writer\nversion: 0.1.0\ndescription: test\n---\nbody\n"
+    )
+    (root / "schema.json").write_text('{"input":{"type":"object"},"output":{"type":"object"}}')
+    (root / "impl.py").write_text(
+        "import time\nfrom pathlib import Path\n"
+        f"def run(context, input):\n    time.sleep(2)\n"
+        f"    Path({str(marker)!r}).write_text('ran')\n    return {{}}\n"
+    )
+    monkeypatch.setattr(config, "SKILLS_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "REPO_ROOT", str(tmp_path))
+    session = SessionLocal()
+    sync_library(session, _org_id(seeded))
+    agent = session.query(Agent).filter_by(slug="sales-research").one()
+    agent.skills = agent.skills + [slug]
+    session.commit()
+    r = client.post("/v1/tasks", headers=owner_headers, json={
+        "agent_slug": "sales-research", "skill_slug": slug,
+        "input": {}, "timeout_seconds": 1, "max_retries": 1
+    })
+    task_id = r.json()["task_id"]
+    process_one(session, session.query(Task).filter_by(id=task_id).one())
+    time.sleep(2.2)
+    assert not marker.exists()
+    assert client.get(f"/v1/tasks/{task_id}", headers=owner_headers).json()["status"] == "failed"
+    session.close()
+
+
 def _org_id(seeded_flag):
     from engine.auth import get_org_id
     s = SessionLocal()

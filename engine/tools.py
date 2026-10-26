@@ -9,7 +9,7 @@ from .approvals import create_approval, requires_approval
 from .auth import Principal
 from .models import Agent, Schedule, Skill, Task, TaskRun, utcnow
 from .skills_lib import (SkillDef, SkillError, active_version, load_skill_dir,
-                         publish, rollback, run_skill, versions)
+                         publish, rollback, run_skill, skill_impl, validate, versions)
 
 
 class PermissionDenied(Exception):
@@ -139,18 +139,31 @@ def propose_skill_edit(session: Session, principal: Principal, slug: str,
     from .skills_lib import _parse_frontmatter, hash_bytes
 
     meta, _ = _parse_frontmatter(new_body)
+    if meta["name"] != slug or meta["version"] != new_version:
+        raise SkillError("skill name and version must match the proposal")
+    if tuple(map(int, new_version.split("."))) <= tuple(map(int, current.version.split("."))):
+        raise SkillError("new skill version must be greater than the active version")
     sd = SkillDef(slug=slug, name=meta["name"], version=new_version,
                   description=meta.get("description", ""), body=new_body,
                   schema_input=current.schema_input, schema_output=current.schema_output,
                   content_hash=hash_bytes(new_body.encode()))
     sample_input = {"business_name": "Sample Business", "website": "https://example.com"} \
         if "business_name" in (current.schema_input.get("properties") or {}) else {}
-    sample: Dict[str, Any] = {"note": "sample uses current published version"}
+    sample: Dict[str, Any] = {"note": "no sample input available"}
+    candidate_sample: Dict[str, Any] = {"note": "no sample input available"}
     if sample_input:
-        provider = providers.get_provider()
+        provider = providers.DevProvider()
         out, _ver = run_skill(session, principal.organization_id, slug, sample_input,
                               {"provider": provider, "fetch": _sample_fetch(provider)})
         sample = out
+        candidate_sample = skill_impl(slug)(
+            {"provider": provider, "fetch": _sample_fetch(provider),
+             "skill_instructions": new_body, "skill_version": new_version},
+            sample_input,
+        )
+        errors = validate(candidate_sample, current.schema_output, "output")
+        if errors:
+            raise SkillError("candidate sample failed schema: " + "; ".join(errors))
     ap = create_approval(session, principal.organization_id, "skill.publish",
                          {"slug": slug, "version": new_version, "body": new_body,
                           "reason": reason, "schema_input": current.schema_input,
@@ -159,7 +172,8 @@ def propose_skill_edit(session: Session, principal: Principal, slug: str,
     audit.log(session, principal, "skill.propose_edit", "skill", slug,
               {"version": new_version, "approval_id": ap.id})
     return {"approval_id": ap.id, "slug": slug, "proposed_version": new_version,
-            "current_version": current.version, "sample_output": sample}
+            "current_version": current.version, "sample_output": sample,
+            "proposed_sample_output": candidate_sample}
 
 
 def execute_skill_publish(session: Session, principal: Principal, payload: Dict[str, Any],

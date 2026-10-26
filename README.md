@@ -11,11 +11,11 @@ authenticated HTTPS APIs.
 ## Layout
 
 - `engine/api/` — FastAPI app (chat SSE, tasks, runs, skills, schedules, approvals, costs, agents)
-- `engine/agents/` — agent definitions (Muffy orchestrator, Sales Research Agent) — separate from skills
-- `engine/skills_lib.py` — Git-backed Skills Library loader (versioned, rollback)
+- `engine/muffy.py` and `engine/seed.py` — orchestrator and agent registry, separate from skills
+- `engine/skills_lib.py` — repository-tracked skill definitions and database versions
 - `skills/` — Skills Library: SKILL.md + schema.json + version metadata + tests per skill
 - `engine/worker.py` — task queue consumer: retries, timeouts, background jobs
-- `engine/schedules.py` — cron-style schedules + event triggers
+- `engine/worker.py` — interval schedules and event-triggered jobs
 - `engine/models.py` + `db/migrations/` — org-scoped Postgres schema (Alembic)
 - `tests/` — pytest: delegation, authorization, skill versioning, approvals, failure logging
 
@@ -31,10 +31,13 @@ authenticated HTTPS APIs.
 
 ## Local development (no Docker required)
 
+Use Python 3.12 for Muffy's OpenAI Agents SDK (the host Mac's system Python
+3.9 can run most tests, but cannot import the current SDK).
+
 ```sh
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env   # fill in values; never commit .env
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 .venv/bin/alembic upgrade head
+.venv/bin/python -m engine.seed
 .venv/bin/uvicorn engine.api.app:create_app --factory --reload &
 .venv/bin/python -m engine.worker &   # background task runner + scheduler tick
 .venv/bin/pytest
@@ -48,19 +51,30 @@ local demos run without spending money.
 ## Deployment (container, provider-portable)
 
 ```sh
-docker build -t los-cloud-engine .
-docker compose up         # api + worker + postgres
+cp .env.example .env   # set two strong DB passwords; never commit .env
+docker compose up --build  # api + worker + Postgres
 ```
 
 Set env vars per `.env.example`. Nothing vendor-specific: any container host
-(Render, Fly.io, Cloud Run) works. CI (`.github/workflows/ci.yml`) runs pytest,
-lint and the docker build. **Do not provision paid services without the
+(Render, Fly.io, Cloud Run) works. CI (`.github/workflows/ci.yml`) runs pytest
+and builds both images. **Do not provision paid services without the
 approved cost estimate.**
+
+## Remaining launch gates
+
+- PostgreSQL RLS has not been exercised against a real Postgres instance on this
+  Mac (no Docker or `psql` installed). Never connect the engine as `postgres`
+  or a Supabase `service_role`: both can bypass tenant policies.
+- The approved SKILL.md version is saved in the database and local files, but
+  an immutable GitHub commit is **not guaranteed** from a container. Configure
+  and verify a GitHub-backed publish flow before enabling live skill publishing.
+- Muffy's live OpenAI chat, browser CORS, Lovable owner JWTs, and non-owner
+  denial must be tested against actual staging endpoints before publishing the UI.
 
 ## Safety rules enforced in code
 
-- Owner-only orchestration; per-organization isolation (`organization_id` on
-  every table; RLS policies in Postgres deployments).
+- Owner-only orchestration; tenant-scoped API queries and fail-closed Postgres
+  policies for tenant tables (owner-only conversation/message policies).
 - Destructive / financial / publishing / external-communication actions require
   an explicit owner approval row before execution.
 - Agents never get production credentials, unrestricted filesystem access, or

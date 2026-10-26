@@ -1,7 +1,7 @@
 """Database engine/session management. sqlite for dev/tests, Postgres in deploy."""
 from typing import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import config
@@ -23,6 +23,30 @@ def _sqlite_fk(dbapi_conn, _):  # pragma: no cover - sqlite only
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+@event.listens_for(Session, "after_begin")
+def _apply_scope(session, transaction, connection):
+    if connection.dialect.name != "postgresql":
+        return
+    for setting, field in (
+        ("app.organization_id", "organization_id"),
+        ("app.user_id", "user_id"),
+        ("app.api_key_hash", "api_key_hash"),
+    ):
+        value = session.info.get(field)
+        if value:
+            connection.execute(
+                text("SELECT set_config(:setting, :value, true)"),
+                {"setting": setting, "value": value},
+            )
+
+
+def scope_session(session: Session, organization_id: str, user_id: str = "") -> None:
+    # Bind context before the first tenant query; after_begin reapplies it
+    # after every commit (Postgres SET LOCAL lasts only one transaction).
+    session.info["organization_id"] = organization_id
+    session.info["user_id"] = user_id
 
 
 def get_session() -> Iterator[Session]:

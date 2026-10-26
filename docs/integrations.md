@@ -25,9 +25,10 @@ preserve/migrate.
 
 ## 3. Laurel Companion (native Mac app)
 
-- Set `brainUrl` to the engine base URL; Companion authenticates with a machine
-  key scoped to `chat`-adjacent read tools only (`task.read`, `agent.read`,
-  `skill.read`). Its hot-button prompts become `POST /v1/tasks` or chat calls.
+- This is a future integration, not connected today. A scoped machine key can
+  read agents/skills/tasks and submit explicitly authorized tasks. It **cannot**
+  call owner-only `/v1/chat` or read Muffy's private memory. A future owner
+  sign-in/token exchange is needed before `brainUrl` can carry Muffy chat.
 - ⚠️ Its local config currently holds plaintext provider keys — rotate those
   and never commit them anywhere.
 
@@ -51,9 +52,9 @@ approved step with read-only scopes first.
 
 ## 7. Future workers (cloud browser workers, Mac mini)
 
-Pull model: workers register, poll `GET /v1/tasks` work streams with their
-scoped keys, post results. No inbound access to the engine's DB; keys scoped
-per worker; revoke = one row. Design only in v0.1.
+Pull model (design only): workers register, poll scoped work streams and post
+results. Those worker APIs do not exist in v0.1; do not treat Mac mini or cloud
+browser workers as operational.
 
 ## Endpoint summary (all authenticated except /healthz)
 
@@ -69,5 +70,5 @@ per worker; revoke = one row. Design only in v0.1.
 | Approvals | `GET /v1/approvals`, `POST /v1/approvals/{id}/decide` | owner only |
 | Schedules | `POST /v1/schedules` (create/pause/resume/list) | `schedule.manage` |
 | Costs | `GET /v1/costs` | `cost.read` |
-| Events | `POST /v1/events/{name}` | machine key |
+| Events | `POST /v1/events/{name}` | `event.fire` |
 | Machine keys | `POST /v1/keys` | owner only (shown once) |

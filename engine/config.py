@@ -13,6 +13,9 @@ MUFFY_MODEL = os.environ.get("MUFFY_MODEL", "gpt-4o")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+ALLOWED_ORIGINS = [url.strip() for url in os.environ.get(
+    "ENGINE_ALLOWED_ORIGINS", ""
+).split(",") if url.strip()]
 
 DEFAULT_ORG = os.environ.get("ENGINE_DEFAULT_ORG", "laurel")
 

@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from . import config
-from .db import get_session
+from .db import get_session, scope_session
 from .models import ApiKey
 
 
@@ -30,6 +30,7 @@ ALL_PERMISSIONS = [
     "skill.publish",
     "skill.rollback",
     "schedule.manage",
+    "event.fire",
     "cost.read",
     "approval.decide",
 ]
@@ -65,11 +66,13 @@ def verify_supabase_token(token: str) -> Dict[str, Any]:
         if r.status_code != 200:
             raise HTTPException(401, "Invalid Supabase token")
         user = r.json()
+        service_headers = {"apikey": config.SUPABASE_SERVICE_ROLE_KEY}
+        if not config.SUPABASE_SERVICE_ROLE_KEY.startswith("sb_secret_"):
+            service_headers["Authorization"] = f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}"
         role_r = client.get(
             f"{config.SUPABASE_URL}/rest/v1/user_roles",
             params={"user_id": f"eq.{user['id']}", "role": "eq.owner", "select": "role"},
-            headers={**headers, "apikey": config.SUPABASE_SERVICE_ROLE_KEY,
-                     "Authorization": f"Bearer {config.SUPABASE_SERVICE_ROLE_KEY}"},
+            headers=service_headers,
         ) if config.SUPABASE_SERVICE_ROLE_KEY else None
         roles = role_r.json() if role_r is not None and role_r.status_code == 200 else []
     if not roles:
@@ -93,21 +96,30 @@ def get_org_id(session: Session) -> str:
 def get_principal(request: Request, session: Session = Depends(get_session)) -> Principal:
     engine_key = request.headers.get("x-engine-key")
     if engine_key:
+        key_hash = hash_key(engine_key)
+        session.info["api_key_hash"] = key_hash
         row = (
             session.query(ApiKey)
-            .filter_by(key_hash=hash_key(engine_key), revoked_at=None)
+            .filter_by(key_hash=key_hash, revoked_at=None)
             .one_or_none()
         )
         if not row:
             raise HTTPException(401, "Invalid engine key")
-        return Principal(kind="machine", id=f"key:{row.name}", organization_id=row.organization_id,
-                         permissions=list(row.scopes or []), display=row.name)
+        org_id, name, permissions = row.organization_id, row.name, list(row.scopes or [])
+        session.rollback()  # start next transaction with the tenant GUC
+        session.info.pop("api_key_hash", None)
+        scope_session(session, org_id)
+        return Principal(kind="machine", id=f"key:{name}", organization_id=org_id,
+                         permissions=permissions, display=name)
 
     auth = request.headers.get("authorization", "")
     token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
     if token:
         user = verify_supabase_token(token)
-        return Principal(kind="owner", id=user["id"], organization_id=get_org_id(session),
+        org_id = get_org_id(session)
+        session.rollback()
+        scope_session(session, org_id, user["id"])
+        return Principal(kind="owner", id=user["id"], organization_id=org_id,
                          permissions=list(ALL_PERMISSIONS),
                          display=user.get("email") or user["id"])
     raise HTTPException(401, "Authentication required")

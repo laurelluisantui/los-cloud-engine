@@ -2,10 +2,12 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_PASSWORD: engine-dev
+      POSTGRES_PASSWORD: ${ENGINE_DB_ADMIN_PASSWORD:?Set ENGINE_DB_ADMIN_PASSWORD in .env}
       POSTGRES_DB: engine
+      ENGINE_DB_PASSWORD: ${ENGINE_DB_PASSWORD:?Set ENGINE_DB_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/init/engine-role.sh:/docker-entrypoint-initdb.d/engine-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -20,7 +22,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      ENGINE_DATABASE_URL: postgresql://postgres:engine-dev@db:5432/engine
+      ENGINE_DATABASE_URL: postgresql+psycopg://los_app:${ENGINE_DB_PASSWORD:?Set ENGINE_DB_PASSWORD in .env}@db:5432/engine
       ENGINE_INTERNAL_SECRET: ${ENGINE_INTERNAL_SECRET:-dev-internal-secret-change-me}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
@@ -37,7 +39,7 @@ services:
       api:
         condition: service_started
     environment:
-      ENGINE_DATABASE_URL: postgresql://postgres:engine-dev@db:5432/engine
+      ENGINE_DATABASE_URL: postgresql+psycopg://los_app:${ENGINE_DB_PASSWORD:?Set ENGINE_DB_PASSWORD in .env}@db:5432/engine
       ENGINE_INTERNAL_SECRET: ${ENGINE_INTERNAL_SECRET:-dev-internal-secret-change-me}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 

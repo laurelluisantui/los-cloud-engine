@@ -1,0 +1,19 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["business_name", "website"],
+    "properties": {
+      "business_name": {"type": "string"},
+      "website": {"type": "string"},
+      "topic": {"type": "string"}
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": ["draft", "placeholders"],
+    "properties": {
+      "draft": {"type": "string"},
+      "placeholders": {"type": "array", "items": {"type": "string"}}
+    }
+  }
+}

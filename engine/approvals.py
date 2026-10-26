@@ -5,6 +5,7 @@ import datetime
 from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 
 from .models import Approval, utcnow
 
@@ -46,14 +47,17 @@ def list_pending(session: Session, org_id: str) -> List[Approval]:
 
 def decide(session: Session, org_id: str, approval_id: str, approve: bool,
            decided_by: str) -> Approval:
-    ap = session.query(Approval).filter_by(id=approval_id, organization_id=org_id).one_or_none()
-    if ap is None:
-        raise KeyError("approval not found")
-    if ap.status != "pending":
-        raise ValueError(f"approval already {ap.status}")
-    ap.status = "approved" if approve else "rejected"
-    ap.decided_by = decided_by
-    ap.decided_at = datetime.datetime.utcnow()
+    changed = session.execute(
+        update(Approval)
+        .where(Approval.id == approval_id, Approval.organization_id == org_id,
+               Approval.status == "pending")
+        .values(status="executing" if approve else "rejected",
+                decided_by=decided_by, decided_at=utcnow())
+    )
+    if changed.rowcount != 1:
+        existing = session.query(Approval).filter_by(id=approval_id, organization_id=org_id).one_or_none()
+        if existing is None:
+            raise KeyError("approval not found")
+        raise ValueError(f"approval already {existing.status}")
     session.commit()
-    session.refresh(ap)
-    return ap
+    return session.query(Approval).filter_by(id=approval_id, organization_id=org_id).one()

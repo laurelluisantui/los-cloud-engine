@@ -271,7 +271,8 @@ def run_skill(session: Session, org_id: str, slug: str, input_data: Dict[str, An
     if errors:
         raise SkillError("invalid input: " + "; ".join(errors))
     fn = skill_impl(slug)
-    output = fn(context, input_data)
+    output = fn({**context, "skill_instructions": sv.body,
+                 "skill_version": sv.version}, input_data)
     out_errors = validate(output, sv.schema_output, path="output")
     if out_errors:
         raise SkillError("skill output failed schema: " + "; ".join(out_errors))

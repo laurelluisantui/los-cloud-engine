@@ -131,11 +131,47 @@ after = client.get("/v1/skills/prospect-research", headers=H).json()
 show("7c. After approval: new version live (actual saved record)",
      {"published": r.json()["result"], "active_version": after["version"]})
 
+# 7d. Content Agent skill change: before/after samples and actual new run.
+content = client.get("/v1/skills/content-brief-drafting", headers=H).json()
+content_body = content["body"].replace(
+    "version: 0.1.0", "version: 0.2.0"
+).replace("format: paragraph", "format: bullets")
+proposed = client.post(
+    "/v1/skills/content-brief-drafting/propose", headers=H,
+    json={"new_version": "0.2.0", "body": content_body, "reason": "Scannable briefs"}
+).json()
+show("7d. Content Agent skill: before/after samples, awaiting owner approval", {
+    "before": proposed["sample_output"]["draft"][:120],
+    "after": proposed["proposed_sample_output"]["draft"][:120],
+    "approval_id": proposed["approval_id"],
+})
+assert client.get("/v1/skills/content-brief-drafting", headers=H).json()["version"] == "0.1.0"
+decision = client.post(
+    f"/v1/approvals/{proposed['approval_id']}/decide", headers=H,
+    json={"approve": True}
+)
+assert decision.status_code == 200, decision.text
+content_task = client.post("/v1/tasks", headers=H, json={
+    "agent_slug": "content-agent",
+    "input": {"business_name": "Sample Business", "website": "https://example.com"},
+}).json()["task_id"]
+session = SessionLocal()
+process_one(session, session.query(Task).filter_by(id=content_task).one())
+content_run = session.query(TaskRun).filter_by(task_id=content_task).one()
+show("7e. Content Agent uses the newly saved skill version", {
+    "version": content_run.skill_version, "status": content_run.status,
+    "draft": content_run.output["draft"][:120],
+})
+assert content_run.skill_version == "0.2.0"
+assert content_run.output["draft"].startswith("- Content brief")
+session.close()
+
 # 8. Non-owner cannot touch Muffy or decide approvals
 r = client.post("/v1/chat", headers={"X-Engine-Key": "losk_nope"}, json={"message": "hi"})
-show("8. Non-owner rejected (audit entry written)", {"status_code": r.status_code})
+show("8. Invalid machine credential rejected (no chat access)",
+     {"status_code": r.status_code})
 
 # 9. Costs
 show("9. Cost report (real usage ledger)", client.get("/v1/costs", headers=H).json())
 
-print("\nAll completion-criteria demonstrations passed.\n")
+print("\nOffline demo passed. Live auth, PostgreSQL RLS, GitHub skill sync, and OpenAI chat remain unverified.\n")

@@ -2,7 +2,7 @@
 Idempotent — safe to run on every deploy. Does not mint keys or touch secrets."""
 from . import config
 from .auth import ALL_PERMISSIONS, Principal, get_org_id
-from .db import SessionLocal, engine as db_engine
+from .db import SessionLocal, engine as db_engine, scope_session
 from .models import Agent, Base
 from .skills_lib import sync_library
 from .tools import register_agent
@@ -13,6 +13,8 @@ def seed() -> None:
     session = SessionLocal()
     try:
         org_id = get_org_id(session)
+        session.rollback()
+        scope_session(session, org_id)
         system = Principal(kind="system", id="seed", organization_id=org_id,
                            permissions=list(ALL_PERMISSIONS))
         synced = sync_library(session, org_id)
@@ -27,6 +29,9 @@ def seed() -> None:
              "No outreach, no external writes.",
              ["prospect-research", "prospect-website-audit", "proposal-drafting"],
              ["research.public"]),
+            ("content-agent", "FORM + LOGIC Content Agent", "specialist",
+             "Drafts review-only content briefs. Cannot publish, send or schedule.",
+             ["content-brief-drafting"], ["content.draft"]),
         ]:
             existing = (session.query(Agent)
                         .filter_by(organization_id=org_id, slug=slug).one_or_none())

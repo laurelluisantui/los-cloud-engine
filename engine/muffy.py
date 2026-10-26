@@ -41,12 +41,12 @@ def _build_tools(session: Session, principal: Principal, conversation_id: str) -
         return json.dumps(payload, default=str)
 
     @function_tool
-    def tool_list_agents() -> str:
+    async def tool_list_agents() -> str:
         """List active agents in the registry with their skills and permissions."""
         return _j(list_agents(session, principal))
 
     @function_tool
-    def tool_delegate_task(agent_slug: str, input_json: str, skill_slug: str = "") -> str:
+    async def tool_delegate_task(agent_slug: str, input_json: str, skill_slug: str = "") -> str:
         """Delegate a background task to a specialist agent. The task is queued
         and continues after this chat closes. input_json is a JSON object of the
         skill's input (e.g. {"business_name": "...", "website": "..."})."""
@@ -56,40 +56,40 @@ def _build_tools(session: Session, principal: Principal, conversation_id: str) -
         return _j({"task_id": task.id, "status": task.status})
 
     @function_tool
-    def tool_task_status(task_id: str) -> str:
+    async def tool_task_status(task_id: str) -> str:
         """Real execution status of a task from the database, including runs."""
         return _j(task_status(session, principal, task_id))
 
     @function_tool
-    def tool_run_history(limit: int = 10) -> str:
+    async def tool_run_history(limit: int = 10) -> str:
         """Recent task runs (status, errors, cost) from the database."""
         return _j(run_history(session, principal, limit))
 
     @function_tool
-    def tool_read_skill(slug: str) -> str:
+    async def tool_read_skill(slug: str) -> str:
         """Read the currently published version of a skill (body + schemas)."""
         data = read_skill(session, principal, slug)
         return _j({**data, "body": data["body"][:4000]})
 
     @function_tool
-    def tool_skill_versions(slug: str) -> str:
+    async def tool_skill_versions(slug: str) -> str:
         """List all recorded versions of a skill."""
         return _j(skill_versions(session, principal, slug))
 
     @function_tool
-    def tool_propose_skill_edit(slug: str, new_version: str, new_body: str,
+    async def tool_propose_skill_edit(slug: str, new_version: str, new_body: str,
                                 reason: str = "") -> str:
         """Propose an edit to a skill. Produces a sample output from the current
         version and opens an owner approval. Publishes NOTHING by itself."""
         return _j(propose_skill_edit(session, principal, slug, new_body, new_version, reason))
 
     @function_tool
-    def tool_request_skill_rollback(slug: str, to_version: str) -> str:
+    async def tool_request_skill_rollback(slug: str, to_version: str) -> str:
         """Request rolling a skill back to an earlier version (owner approval)."""
         return _j(request_skill_rollback(session, principal, slug, to_version))
 
     @function_tool
-    def tool_schedule(action: str, name: str = "", interval_seconds: int = 3600,
+    async def tool_schedule(action: str, name: str = "", interval_seconds: int = 3600,
                       agent_slug: str = "", input_json: str = "{}",
                       schedule_id: str = "") -> str:
         """Manage scheduled automations: action is create|pause|resume|list."""
@@ -98,7 +98,7 @@ def _build_tools(session: Session, principal: Principal, conversation_id: str) -
                                   json.loads(input_json), schedule_id or None))
 
     @function_tool
-    def tool_cost_report() -> str:
+    async def tool_cost_report() -> str:
         """Usage and cost totals by provider/model."""
         return _j(cost_report(session, principal))
 

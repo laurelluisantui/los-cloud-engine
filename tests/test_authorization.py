@@ -63,3 +63,9 @@ def test_key_mint_blocks_approval_escalation(client, owner_headers):
     r = client.post("/v1/keys", headers=owner_headers,
                     json={"name": "bad", "scopes": ["approval.decide"]})
     assert r.status_code == 400
+
+
+def test_machine_cannot_fire_events_or_read_approvals(client, machine_headers):
+    assert client.post("/v1/events/new-lead", headers=machine_headers,
+                       json={}).status_code == 403
+    assert client.get("/v1/approvals", headers=machine_headers).status_code == 403

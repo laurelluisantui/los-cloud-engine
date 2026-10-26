@@ -5,11 +5,12 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import audit, tools
+from .. import audit, config, tools
 from ..approvals import decide as decide_approval
 from ..approvals import list_pending
 from ..auth import ALL_PERMISSIONS, Principal, get_principal, hash_key
@@ -33,8 +34,8 @@ class TaskIn(BaseModel):
     agent_slug: str
     input: Dict[str, Any] = {}
     skill_slug: Optional[str] = None
-    timeout_seconds: int = 600
-    max_retries: int = 3
+    timeout_seconds: int = Field(default=600, ge=1, le=3600)
+    max_retries: int = Field(default=3, ge=1, le=10)
 
 
 class SkillEditIn(BaseModel):
@@ -68,6 +69,12 @@ class KeyIn(BaseModel):
 def create_app() -> FastAPI:
     configure()
     app = FastAPI(title="L·OS Cloud Engine", version="0.1.0")
+    if config.ALLOWED_ORIGINS:
+        app.add_middleware(
+            CORSMiddleware, allow_origins=config.ALLOWED_ORIGINS,
+            allow_credentials=False, allow_methods=["GET", "POST"],
+            allow_headers=["authorization", "content-type", "x-engine-key"],
+        )
 
     @app.middleware("http")
     async def _ctx(request: Request, call_next):
@@ -161,6 +168,8 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------- approvals --
     @app.get("/v1/approvals")
     def approvals(principal: Principal = P, session: Session = S):
+        if principal.kind != "owner":
+            raise HTTPException(403, "Only the owner can view approvals")
         items = list_pending(session, principal.organization_id)
         return {"approvals": [
             {"id": a.id, "action": a.action, "requested_by": a.requested_by,
@@ -180,18 +189,26 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "approval not found")
         except ValueError as exc:
             raise HTTPException(409, str(exc))
-        audit.log(session, principal,
-                  "approval.approved" if body.approve else "approval.rejected",
-                  "approval", ap.id, {"action": ap.action})
         result = None
         if body.approve:
             try:
                 result = tools.execute_approved(session, principal, ap)
             except Exception as exc:
+                session.rollback()
+                ap = session.query(Approval).filter_by(id=approval_id, organization_id=principal.organization_id).one()
+                ap.status = "failed"
+                session.commit()
+                audit.log(session, principal, "approval.failed", "approval", ap.id,
+                          {"action": ap.action, "error": str(exc)[:500]})
                 raise HTTPException(500, f"approved action failed: {exc}")
+            ap.status = "approved"
+            session.commit()
             if hasattr(result, "version"):
                 result = {"published": {"slug": ap.payload.get("slug"),
                                         "version": getattr(result, "version", None)}}
+        audit.log(session, principal,
+                  "approval.approved" if body.approve else "approval.rejected",
+                  "approval", ap.id, {"action": ap.action})
         return {"status": ap.status, "result": result}
 
     # ---------------------------------------------------------- schedules --
@@ -217,6 +234,8 @@ def create_app() -> FastAPI:
     @app.post("/v1/events/{event_name}", status_code=202)
     def event(event_name: str, payload: Dict[str, Any] = {},
               principal: Principal = P, session: Session = S):
+        if not principal.can("event.fire"):
+            raise HTTPException(403, "Missing permission: event.fire")
         n = fire_event(session, principal.organization_id, event_name, payload)
         audit.log(session, principal, "event.fire", "event", event_name, {"enqueued": n})
         return {"enqueued": n}
