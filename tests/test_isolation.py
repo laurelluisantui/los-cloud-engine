@@ -24,6 +24,7 @@ def test_other_organization_cannot_read_owner_agents_or_tasks(
     headers = {"X-Engine-Key": "losk_other"}
     assert client.get("/v1/agents", headers=headers).json()["agents"] == []
     assert client.get(f"/v1/tasks/{task_id}", headers=headers).status_code == 404
+    assert client.get(f"/v1/tasks/{task_id}/result", headers=headers).status_code == 404
 
 
 def test_rls_policies_have_no_missing_context_fallback():

@@ -29,6 +29,9 @@ def test_delegate_and_execute_sales_research(client, owner_headers, seeded):
     assert len(body["runs"]) == 1
     assert body["runs"][0]["status"] == "succeeded"
     assert body["runs"][0]["skill_version"] == "pipeline-v1"
+    result = client.get(f"/v1/tasks/{task_id}/result", headers=owner_headers)
+    assert result.status_code == 200
+    assert "proposal_markdown" in result.json()["output"]["proposal"]
 
     r = client.get("/v1/runs", headers=owner_headers)
     assert any(run["task_id"] == task_id for run in r.json()["runs"])

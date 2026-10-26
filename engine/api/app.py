@@ -128,6 +128,23 @@ def create_app() -> FastAPI:
         except KeyError as exc:
             raise HTTPException(404, str(exc.args[0]))
 
+    @app.get("/v1/tasks/{task_id}/result")
+    def task_result(task_id: str, principal: Principal = P, session: Session = S):
+        from ..models import Task, TaskRun
+        if not principal.can("task.read"):
+            raise HTTPException(403, "Missing permission: task.read")
+        task = session.query(Task).filter_by(
+            id=task_id, organization_id=principal.organization_id
+        ).one_or_none()
+        if task is None:
+            raise HTTPException(404, "task not found")
+        run = (session.query(TaskRun).filter_by(
+            task_id=task.id, organization_id=principal.organization_id
+        ).order_by(TaskRun.started_at.desc()).first())
+        return {"task_id": task.id, "status": task.status,
+                "run_id": run.id if run else None,
+                "output": run.output if run and run.status == "succeeded" else None}
+
     @app.get("/v1/runs")
     def runs(limit: int = 20, principal: Principal = P, session: Session = S):
         return {"runs": tools.run_history(session, principal, limit)}

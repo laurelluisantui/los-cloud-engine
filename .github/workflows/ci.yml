@@ -94,6 +94,8 @@ jobs:
           PY
           code=$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8000/v1/agents)
           test "$code" = 401
+      - name: Verify API to worker to database execution
+        run: docker compose exec -T api python scripts/verify_compose_runtime.py
       - name: Show startup diagnostics on failure
         if: failure()
         run: docker compose logs --no-color --tail=100 api worker db

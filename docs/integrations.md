@@ -63,7 +63,7 @@ browser workers as operational.
 | Chat (SSE) | `POST /v1/chat` | owner only |
 | Memory | `GET /v1/conversations/{id}/messages` | owner only |
 | Agents | `GET /v1/agents` | `agent.read` |
-| Tasks | `POST /v1/tasks`, `GET /v1/tasks/{id}` | `task.create` / `task.read` |
+| Tasks | `POST /v1/tasks`, `GET /v1/tasks/{id}`, `/v1/tasks/{id}/result` | `task.create` / `task.read` |
 | Runs | `GET /v1/runs` | `task.read` |
 | Skills | `GET /v1/skills/{slug}`, `/versions` | `skill.read` |
 | Skill edits | `POST /v1/skills/{slug}/propose`, `/rollback` | `skill.write`/`rollback` (+ approval) |
