@@ -1,0 +1,28 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["website"],
+    "properties": {
+      "website": {"type": "string"}
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": ["checks", "summary"],
+    "properties": {
+      "checks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "result", "evidence"],
+          "properties": {
+            "name": {"type": "string"},
+            "result": {"type": "string", "enum": ["pass", "fail", "unknown"]},
+            "evidence": {"type": "string"}
+          }
+        }
+      },
+      "summary": {"type": "string"}
+    }
+  }
+}

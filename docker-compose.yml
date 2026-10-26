@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: engine-dev
+      POSTGRES_DB: engine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENGINE_DATABASE_URL: postgresql://postgres:engine-dev@db:5432/engine
+      ENGINE_INTERNAL_SECRET: ${ENGINE_INTERNAL_SECRET:-dev-internal-secret-change-me}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      target: worker
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      ENGINE_DATABASE_URL: postgresql://postgres:engine-dev@db:5432/engine
+      ENGINE_INTERNAL_SECRET: ${ENGINE_INTERNAL_SECRET:-dev-internal-secret-change-me}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+volumes:
+  pgdata:

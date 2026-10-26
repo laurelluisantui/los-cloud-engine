@@ -1,0 +1,32 @@
+{
+  "input": {
+    "type": "object",
+    "required": ["business_name", "website", "findings"],
+    "properties": {
+      "business_name": {"type": "string"},
+      "website": {"type": "string"},
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["claim", "evidence_url"],
+          "properties": {
+            "claim": {"type": "string"},
+            "evidence_url": {"type": "string"},
+            "source_excerpt": {"type": "string"}
+          }
+        }
+      },
+      "services": {"type": "array", "items": {"type": "string"}}
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": ["proposal_markdown", "placeholders", "based_on_findings"],
+    "properties": {
+      "proposal_markdown": {"type": "string"},
+      "placeholders": {"type": "array", "items": {"type": "string"}},
+      "based_on_findings": {"type": "integer"}
+    }
+  }
+}
