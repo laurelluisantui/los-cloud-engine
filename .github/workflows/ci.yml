@@ -28,3 +28,40 @@ jobs:
         run: |
           docker build --target api -t los-engine-api:ci .
           docker build --target worker -t los-engine-worker:ci .
+
+  postgres-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        # Trust is safe ONLY for this disposable, runner-local CI service;
+        # production always requires a strong password and a non-bypass role.
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: los_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d los_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Create non-bypass app role
+        run: |
+          python - <<'PY'
+          import psycopg
+          with psycopg.connect("postgresql://postgres@localhost:5432/los_ci", autocommit=True) as conn:
+              conn.execute("CREATE ROLE los_ci LOGIN")
+              conn.execute("ALTER DATABASE los_ci OWNER TO los_ci")
+          PY
+      - name: Migrate and test real PostgreSQL RLS
+        env:
+          ENGINE_DATABASE_URL: postgresql+psycopg://los_ci@localhost:5432/los_ci
+        run: |
+          alembic upgrade head
+          python scripts/verify_postgres_rls.py
