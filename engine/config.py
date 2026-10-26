@@ -7,8 +7,8 @@ DATABASE_URL = os.environ.get(
 INTERNAL_SECRET = os.environ.get("ENGINE_INTERNAL_SECRET", "dev-internal-secret-change-me")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") or None
-ENGINE_MODEL = os.environ.get("ENGINE_MODEL", "gpt-4o-mini")
-MUFFY_MODEL = os.environ.get("MUFFY_MODEL", "gpt-4o")
+ENGINE_MODEL = os.environ.get("ENGINE_MODEL", "gpt-5.4-mini")
+MUFFY_MODEL = os.environ.get("MUFFY_MODEL", "gpt-5.4-mini")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")

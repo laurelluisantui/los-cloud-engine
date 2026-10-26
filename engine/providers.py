@@ -68,6 +68,7 @@ def get_provider() -> Any:
 
 # Rough cost table ($/1M tokens) for usage accounting; dev provider costs 0.
 COST_PER_M = {
+    "gpt-5.4-mini": (0.75, 4.50),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
 }
