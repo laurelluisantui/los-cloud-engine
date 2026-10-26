@@ -65,9 +65,11 @@ approved cost estimate.**
 - PostgreSQL RLS has not been exercised against a real Postgres instance on this
   Mac (no Docker or `psql` installed). Never connect the engine as `postgres`
   or a Supabase `service_role`: both can bypass tenant policies.
-- The approved SKILL.md version is saved in the database and local files, but
-  an immutable GitHub commit is **not guaranteed** from a container. Configure
-  and verify a GitHub-backed publish flow before enabling live skill publishing.
+- On Postgres, an approved skill publish requires a narrow GitHub credential
+  (`ENGINE_GITHUB_TOKEN`) and checks the remote SHA/content before updating
+  `SKILL.md`. Its real GitHub integration has only mock tests; verify it in
+  staging before allowing owner skill writes. Git and DB cannot commit in one
+  transaction, so a post-Git DB error requires manual reconciliation.
 - Muffy's live OpenAI chat, browser CORS, Lovable owner JWTs, and non-owner
   denial must be tested against actual staging endpoints before publishing the UI.
 

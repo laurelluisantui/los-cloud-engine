@@ -28,6 +28,9 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
      (the *laurel-haven Lovable Cloud* project — used to validate owner JWTs)
    - `ENGINE_INTERNAL_SECRET` — generate a random 32+ char value
    - `ENGINE_ALLOWED_ORIGINS` — exact Lovable owner site origin; no wildcard
+   - `ENGINE_GITHUB_TOKEN` — GitHub App/fine-grained repo-only Contents:write
+     credential, injected server-side; Postgres refuses skill publishing
+     without it. Never pass this credential to Muffy or a browser.
 4. `alembic upgrade head` applies RLS automatically on Postgres; verify
    cross-tenant reads and writes are denied with an unset/wrong org context.
 5. In laurel-haven, set the engine base URL env var (used by the Muffy panel)
@@ -45,8 +48,9 @@ Fly.io, GCP Cloud Run, or any VM with Docker. First target: **Render**
 - Application: redeploy the previous image tag.
 - Database: test `alembic downgrade -1` on staging before any production
   rollback (downgrading RLS removes isolation, so NEVER run live unreviewed).
-- Skill content: `skill.rollback` is approval-gated; durable GitHub sync is
-  not yet operational.
+- Skill content: `skill.rollback` is owner approval-gated and checks the
+  remote GitHub version before committing; verify the staging Git/DB state
+  before relying on it in production.
 
 ## Security checklist (every deploy)
 

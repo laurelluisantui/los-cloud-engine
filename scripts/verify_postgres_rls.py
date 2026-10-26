@@ -3,6 +3,11 @@
 Uses a newly created empty DB and an application role without BYPASSRLS.
 Fails if tenant context is absent, wrong, or not reapplied after commit.
 """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 

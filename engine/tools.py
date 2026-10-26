@@ -209,7 +209,8 @@ def request_skill_rollback(session: Session, principal: Principal, slug: str,
 def execute_skill_rollback(session: Session, principal: Principal, payload: Dict[str, Any],
                            approval_id: str) -> Any:
     _need(principal, "skill.rollback")
-    sv = rollback(session, principal.organization_id, payload["slug"], payload["to_version"])
+    sv = rollback(session, principal.organization_id, payload["slug"],
+                  payload["to_version"], approval_id=approval_id)
     audit.log(session, principal, "skill.rollback", "skill", payload["slug"],
               {"to_version": payload["to_version"], "approval_id": approval_id})
     return sv

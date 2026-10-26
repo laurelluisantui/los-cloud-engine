@@ -26,3 +26,11 @@ MAX_RETRIES = int(os.environ.get("ENGINE_MAX_RETRIES", "3"))
 # Repo root (skills/ lives here); skills library is Git-backed at this path.
 REPO_ROOT = os.environ.get("ENGINE_REPO_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SKILLS_DIR = os.path.join(REPO_ROOT, "skills")
+GITHUB_TOKEN = os.environ.get("ENGINE_GITHUB_TOKEN", "")
+GITHUB_REPO = os.environ.get("ENGINE_GITHUB_REPO", "laurelluisantui/los-cloud-engine")
+GITHUB_BRANCH = os.environ.get("ENGINE_GITHUB_BRANCH", "main")
+# Deployed Postgres must never claim a skill is published without a GitHub commit.
+REQUIRE_GITHUB_SYNC = os.environ.get(
+    "ENGINE_REQUIRE_GITHUB_SYNC",
+    "true" if DATABASE_URL.startswith("postgresql") else "false",
+).lower() == "true"

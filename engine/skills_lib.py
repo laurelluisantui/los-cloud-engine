@@ -3,6 +3,7 @@ schemas + a pure-python impl) living under skills/<slug>/. Publishing writes
 the files, commits to Git (best-effort), and records a SkillVersion row with a
 content hash, so rollbacks restore exact prior bytes.
 """
+import base64
 import hashlib
 import importlib.util
 import json
@@ -12,6 +13,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import httpx
 from sqlalchemy.orm import Session
 
 from . import config
@@ -113,6 +115,47 @@ def git_history(slug: str) -> List[str]:
     return [l for l in out.splitlines() if l]
 
 
+def sync_approved_skill(slug: str, body: str, current_body: str) -> str:
+    """Commit an approved SKILL.md to the central GitHub library.
+
+    No filesystem access or credential is passed to the agent. GitHub's
+    optimistic SHA guard blocks concurrent edits rather than overwriting them.
+    """
+    if not config.GITHUB_TOKEN:
+        raise SkillError("GitHub skill publisher is not configured")
+    if not re.fullmatch(r"[a-z0-9-]+", slug):
+        raise SkillError("invalid skill slug")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", config.GITHUB_REPO):
+        raise SkillError("invalid GitHub repository configuration")
+    url = (f"https://api.github.com/repos/{config.GITHUB_REPO}"
+           f"/contents/skills/{slug}/SKILL.md")
+    headers = {
+        "Authorization": f"Bearer {config.GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    with httpx.Client(timeout=15, trust_env=False) as client:
+        current = client.get(url, params={"ref": config.GITHUB_BRANCH}, headers=headers)
+        if current.status_code != 200:
+            raise SkillError(f"GitHub skill read failed ({current.status_code})")
+        entry = current.json()
+        remote_body = base64.b64decode(entry["content"]).decode("utf-8")
+        if remote_body != current_body:
+            raise SkillError("GitHub skill differs from the active version; review before publishing")
+        saved = client.put(url, headers=headers, json={
+            "message": f"skill({slug}): publish approved version",
+            "content": base64.b64encode(body.encode("utf-8")).decode("ascii"),
+            "sha": entry["sha"],
+            "branch": config.GITHUB_BRANCH,
+        })
+        if saved.status_code not in (200, 201):
+            raise SkillError(f"GitHub skill write failed ({saved.status_code})")
+        commit_sha = saved.json().get("commit", {}).get("sha")
+        if not commit_sha:
+            raise SkillError("GitHub returned no commit SHA")
+        return commit_sha
+
+
 # ------------------------------------------------------------- validation --
 def validate(data: Any, schema: Dict[str, Any], path: str = "input") -> List[str]:
     """Minimal JSON-schema subset: type, required, properties, enum, items."""
@@ -165,6 +208,13 @@ def publish(session: Session, org_id: str, sd: SkillDef, created_by: str,
            .filter_by(skill_id=sk.id, version=sd.version).one_or_none())
     if dup and dup.content_hash != sd.content_hash:
         raise SkillError(f"version {sd.version} already exists with different content")
+    if write_files and config.REQUIRE_GITHUB_SYNC:
+        if not approval_id or not sk.active_version:
+            raise SkillError("live skill publishing requires owner approval and an active version")
+        old = active_version(session, org_id, sd.slug)
+        if old is None:
+            raise SkillError("active skill version missing")
+        sync_approved_skill(sd.slug, sd.body, old.body)
 
     if write_files:
         root = os.path.join(config.SKILLS_DIR, sd.slug)
@@ -191,7 +241,8 @@ def publish(session: Session, org_id: str, sd: SkillDef, created_by: str,
     return sv
 
 
-def rollback(session: Session, org_id: str, slug: str, to_version: str) -> SkillVersion:
+def rollback(session: Session, org_id: str, slug: str, to_version: str,
+             approval_id: Optional[str] = None) -> SkillVersion:
     sk = session.query(Skill).filter_by(organization_id=org_id, slug=slug).one_or_none()
     if sk is None:
         raise SkillError("skill not found")
@@ -199,6 +250,13 @@ def rollback(session: Session, org_id: str, slug: str, to_version: str) -> Skill
               .filter_by(skill_id=sk.id, version=to_version).one_or_none())
     if target is None:
         raise SkillError(f"unknown version {to_version}")
+    if config.REQUIRE_GITHUB_SYNC:
+        if not approval_id:
+            raise SkillError("live rollback requires owner approval")
+        old = active_version(session, org_id, slug)
+        if old is None:
+            raise SkillError("active skill version missing")
+        sync_approved_skill(slug, target.body, old.body)
     root = os.path.join(config.SKILLS_DIR, slug)
     os.makedirs(root, exist_ok=True)
     with open(os.path.join(root, "SKILL.md"), "w", encoding="utf-8") as f:
